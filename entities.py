@@ -47,10 +47,18 @@ class Player:
     def gain_xp(self, amount):
         self.xp += amount
 
+    def xp_level_floor(self):
+        """Cumulative XP at the start of the current level (the bar's left edge)."""
+        idx = self.level - 1
+        if idx < len(XP_PER_LEVEL):
+            return XP_PER_LEVEL[idx]
+        extra = idx - len(XP_PER_LEVEL) + 1
+        return int(XP_PER_LEVEL[-1] * (1.3 ** extra))
+
     def xp_for_next(self):
+        """Cumulative XP needed to reach the next level (the bar's right edge)."""
         if self.level < len(XP_PER_LEVEL):
             return XP_PER_LEVEL[self.level]
-        # Beyond the table: scale by 1.3× per extra level
         extra = self.level - len(XP_PER_LEVEL) + 1
         return int(XP_PER_LEVEL[-1] * (1.3 ** extra))
 

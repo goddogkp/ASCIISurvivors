@@ -221,8 +221,10 @@ def draw_hud(stdscr, player, frame, cols):
     minutes, secs = seconds // 60, seconds % 60
 
     hp_pct = max(0.0, player.hp / player.max_hp)
-    xp_next = player.xp_for_next()
-    xp_pct = min(1.0, player.xp / xp_next) if xp_next else 1.0
+    xp_floor = player.xp_level_floor()
+    xp_next  = player.xp_for_next()
+    xp_span  = max(1, xp_next - xp_floor)
+    xp_pct   = min(1.0, (player.xp - xp_floor) / xp_span)
 
     safe_addstr(stdscr, 0, 0, '╔' + '═' * (cols_win - 2) + '╗', cp('white'))
 
