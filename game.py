@@ -357,12 +357,13 @@ def draw_gameover(stdscr, player, frame, cols, rows):
 
 
 def show_start_screen(stdscr, best_time):
-    stdscr.timeout(50)  # block up to 50 ms per getch so we're not busy-waiting
+    # Block until a keypress — the start screen is static, no animation needed.
+    # Using timeout(-1) avoids any accidental leak of a non-zero timeout into game_loop.
+    stdscr.timeout(-1)
 
-    while True:
+    def _draw():
         rows, cols = stdscr.getmaxyx()
         stdscr.erase()
-
         bw = 54
         bx = max(0, (cols - bw) // 2)
         by = max(0, (rows - 11) // 2)
@@ -386,36 +387,38 @@ def show_start_screen(stdscr, best_time):
         bl(9,  '║' + '  ENTER to play  ·  Q to quit'.center(bw - 2) + '║', cp('white'))
         bl(10, '╚' + '═' * (bw - 2) + '╝', cp('cyan') | curses.A_BOLD)
 
-        # Color toggle lines drawn over the blank rows
         sc_label = f'  [S] Simple Colors:    {"ON " if sc_on else "OFF"}'
         cb_label = f'  [C] Colorblind Mode:  {"ON  (red→blue, green→yellow)" if cb_on else "OFF"}'
-        sc_attr = (cp('cyan') | curses.A_BOLD) if sc_on else cp('white')
-        cb_attr = (cp('cyan') | curses.A_BOLD) if cb_on else cp('white')
-        safe_addstr(stdscr, by + 5, bx + 1, sc_label[:bw - 2], sc_attr)
-        safe_addstr(stdscr, by + 6, bx + 1, cb_label[:bw - 2], cb_attr)
-
+        safe_addstr(stdscr, by + 5, bx + 1, sc_label[:bw - 2],
+                    (cp('cyan') | curses.A_BOLD) if sc_on else cp('white'))
+        safe_addstr(stdscr, by + 6, bx + 1, cb_label[:bw - 2],
+                    (cp('cyan') | curses.A_BOLD) if cb_on else cp('white'))
         stdscr.refresh()
 
+    result = 'play'
+    _draw()
+    while True:
         k = stdscr.getch()
-        if k == -1:
-            continue
         if k in (ord('\n'), 10, 13, curses.KEY_ENTER, ord(' ')):
             break
         elif k == ord('q'):
-            stdscr.nodelay(True)
-            return 'quit'
+            result = 'quit'
+            break
         elif k == ord('s'):
             _color_state['simple'] = not _color_state['simple']
+            _draw()
         elif k == ord('c'):
             _color_state['colorblind'] = not _color_state['colorblind']
+            _draw()
 
-    stdscr.nodelay(True)
-    return 'play'
+    stdscr.timeout(0)  # explicit — nodelay(True) alone isn't reliable on windows-curses
+    return result
 
 
 # ── Main game logic ───────────────────────────────────────────────────────────
 
 def game_loop(stdscr):
+    stdscr.timeout(0)  # guarantee non-blocking getch regardless of prior screen state
     rows, cols = stdscr.getmaxyx()
 
     if cols < MIN_COLS or rows < MIN_ROWS:
