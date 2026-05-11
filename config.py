@@ -135,6 +135,11 @@ COLOR_PAIRS = {
 HP_BAR_WIDTH = 20
 XP_BAR_WIDTH = 20
 
+# Pickup drop rates (checked in order; first match wins)
+MAGNET_DROP_RATE   = 0.01   # 1%  — collects all floor gems instantly
+BIG_XP_DROP_RATE   = 0.05   # 5%  — drops after magnet check
+BIG_XP_MULTIPLIER  = 10     # big orb gives this × normal xp_value
+
 # ── Color Modes ───────────────────────────────────────────────────────────────
 
 # Simple Colors: flatten all entity colors to fixed role-based colors.

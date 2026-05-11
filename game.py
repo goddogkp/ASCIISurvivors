@@ -18,6 +18,7 @@ from config import (
     SIMPLE_COLORS, SIMPLE_ENEMY_COLOR, SIMPLE_PLAYER_COLOR,
     SIMPLE_WEAPON_COLOR, SIMPLE_PICKUP_COLOR,
     COLORBLIND_MODE, COLORBLIND_REMAP,
+    MAGNET_DROP_RATE, BIG_XP_DROP_RATE, BIG_XP_MULTIPLIER,
 )
 from entities import Player, Enemy, XPGem, Bullet, WhipSlash, AoeBlast
 from weapons import WeaponInstance, OrbMarker
@@ -266,7 +267,10 @@ def draw_game(stdscr, player, enemies, bullets, slashes, blasts, orbs, gems, col
 
     for g in gems:
         if UI_ROWS <= g.y < rows and 0 <= g.x < cols:
-            safe_addch(stdscr, g.y, g.x, '*', cp('yellow', 'pickup'))
+            attr = cp(g.color, 'pickup')
+            if g.gem_type != 'normal':
+                attr |= curses.A_BOLD
+            safe_addch(stdscr, g.y, g.x, g.char, attr)
 
     for sl in slashes:
         if sl.active:
@@ -524,10 +528,20 @@ def game_loop(stdscr):
                     player, enemies, bullets, slashes, blasts, orbs, gems, weapon_instances
                 )
                 for e in killed:
-                    gems.append(XPGem(e.x, e.y, e.xp_value))
+                    roll = random.random()
+                    if roll < MAGNET_DROP_RATE:
+                        gems.append(XPGem(e.x, e.y, 0, 'magnet'))
+                    elif roll < MAGNET_DROP_RATE + BIG_XP_DROP_RATE:
+                        gems.append(XPGem(e.x, e.y, e.xp_value * BIG_XP_MULTIPLIER, 'big'))
+                    else:
+                        gems.append(XPGem(e.x, e.y, e.xp_value))
                     player.kills += 1
                 for g in collected:
                     gems.remove(g)
+                if any(g.gem_type == 'magnet' for g in collected):
+                    for g in gems:
+                        player.gain_xp(g.value)
+                    gems.clear()
                 enemies = [e for e in enemies if e.alive]
 
                 spawn_timer += 1

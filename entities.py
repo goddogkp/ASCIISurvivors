@@ -119,10 +119,20 @@ class Enemy:
 
 
 class XPGem:
-    def __init__(self, x, y, value):
+    _TYPES = {
+        'normal': {'char': '*', 'color': 'yellow'},
+        'big':    {'char': '$', 'color': 'yellow'},
+        'magnet': {'char': 'm', 'color': 'cyan'},
+    }
+
+    def __init__(self, x, y, value, gem_type='normal'):
         self.x = int(x)
         self.y = int(y)
         self.value = value
+        self.gem_type = gem_type
+        info = self._TYPES.get(gem_type, self._TYPES['normal'])
+        self.char  = info['char']
+        self.color = info['color']
 
 
 class Bullet:
