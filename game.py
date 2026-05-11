@@ -201,7 +201,9 @@ def resolve_collisions(player, enemies, bullets, slashes, blasts, orbs, gems, we
         if e.alive and e.x == px and e.y == py:
             player.take_damage(e.damage)
 
-    collected = [g for g in gems if g.x == px and g.y == py]
+    # Use a radius that covers the full stride so gems aren't skipped at speed > 1.
+    pickup_radius = max(1.5, player.speed)
+    collected = [g for g in gems if math.hypot(g.x - player.x, g.y - player.y) < pickup_radius]
     for g in collected:
         player.gain_xp(g.value)
 
