@@ -161,3 +161,20 @@ COLORBLIND_REMAP = {
     'red':   'blue',
     'green': 'yellow',
 }
+
+# Boss / Miniboss
+MINIBOSS_SPAWN_FRAME = 9 * 60 * 15    # 8100 frames at 15 FPS = 9 min
+BOSS_SPAWN_FRAME     = 18 * 60 * 15   # 16200 frames at 15 FPS = 18 min
+
+BOSS_DEFS = {
+    'miniboss': {
+        'size': 2, 'char': '#', 'color': 'magenta',
+        'hp': 800, 'speed': 0.08, 'damage': 20,
+        'xp_value': 100, 'attack_cooldown': 45, 'attack_count': 1,
+    },
+    'boss': {
+        'size': 3, 'char': '#', 'color': 'red',
+        'hp': 3000, 'speed': 0.05, 'damage': 30,
+        'xp_value': 500, 'attack_cooldown': 30, 'attack_count': 5,
+    },
+}

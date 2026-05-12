@@ -17,6 +17,7 @@ class Player:
         self.xp = 0
         self.level = 1
         self.kills = 0
+        self.xp_multiplier = 1.0
         self.invuln = 0       # frames remaining of invincibility
         self.dx = 0
         self.dy = 0
@@ -45,7 +46,7 @@ class Player:
             self.invuln -= 1
 
     def gain_xp(self, amount):
-        self.xp += amount
+        self.xp += amount * self.xp_multiplier
 
     def xp_level_floor(self):
         """Cumulative XP at the start of the current level (the bar's left edge)."""
@@ -218,3 +219,75 @@ class AoeBlast:
         self.duration -= 1
         if self.duration <= 0:
             self.active = False
+
+
+class Boss:
+    _id_counter = 0
+
+    def __init__(self, x, y, btype, defn):
+        Boss._id_counter += 1
+        self.id = Boss._id_counter
+        self.btype = btype
+        self.frac_x = float(x)
+        self.frac_y = float(y)
+        self.x = int(x)
+        self.y = int(y)
+        self.size = defn['size']
+        self.char = defn['char']
+        self.color = defn['color']
+        self.hp = defn['hp']
+        self.max_hp = defn['hp']
+        self.speed = defn['speed']
+        self.damage = defn['damage']
+        self.xp_value = defn['xp_value']
+        self.attack_cooldown = defn['attack_cooldown']
+        self.attack_count = defn['attack_count']
+        self._attack_timer = defn['attack_cooldown']
+
+    def cells(self):
+        return [(self.x + dx, self.y + dy)
+                for dy in range(self.size)
+                for dx in range(self.size)]
+
+    @property
+    def center(self):
+        return (self.frac_x + self.size / 2, self.frac_y + self.size / 2)
+
+    def move_toward(self, px, py):
+        cx, cy = self.center
+        dx = px - cx
+        dy = py - cy
+        dist = math.sqrt(dx * dx + dy * dy)
+        if dist < self.size:
+            return
+        self.frac_x += (dx / dist) * self.speed
+        self.frac_y += (dy / dist) * self.speed
+        self.x = int(round(self.frac_x))
+        self.y = int(round(self.frac_y))
+
+    def attack_tick(self, px, py):
+        self._attack_timer -= 1
+        if self._attack_timer > 0:
+            return []
+        self._attack_timer = self.attack_cooldown
+        cx, cy = self.center
+        dx = px - cx
+        dy = py - cy
+        dist = math.sqrt(dx * dx + dy * dy)
+        if dist == 0:
+            return []
+        base_angle = math.atan2(dy, dx)
+        spread = math.radians(20)
+        bullets = []
+        for i in range(self.attack_count):
+            angle = base_angle + (i - (self.attack_count - 1) / 2) * spread
+            bullets.append(Bullet(cx, cy, math.cos(angle), math.sin(angle),
+                                  self.damage, 'O', self.color, 25, speed=1))
+        return bullets
+
+    def take_damage(self, dmg):
+        self.hp -= dmg
+
+    @property
+    def alive(self):
+        return self.hp > 0

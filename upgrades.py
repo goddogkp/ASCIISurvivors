@@ -88,6 +88,13 @@ UPGRADE_POOL = [
         'repeatable': True,
         'requires_weapon': 'fireball',
     },
+    {
+        'id': 'xp_multiplier',
+        'name': 'Scholar',
+        'desc': 'XP gain x1.1 (stacks multiplicatively)',
+        'apply': lambda p, ws: _xp_mult(p),
+        'repeatable': True,
+    },
 ]
 
 
@@ -116,6 +123,11 @@ def _lvl_weapon(weapon_instances, wid):
             w.level_up()
             return True
     return False
+
+
+def _xp_mult(player):
+    player.xp_multiplier *= 1.1
+    return True
 
 
 def get_upgrade_choices(player, weapon_instances, count=3):

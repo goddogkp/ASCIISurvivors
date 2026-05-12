@@ -19,8 +19,9 @@ from config import (
     SIMPLE_WEAPON_COLOR, SIMPLE_PICKUP_COLOR,
     COLORBLIND_MODE, COLORBLIND_REMAP,
     MAGNET_DROP_RATE, BIG_XP_DROP_RATE, BIG_XP_MULTIPLIER,
+    BOSS_DEFS, MINIBOSS_SPAWN_FRAME, BOSS_SPAWN_FRAME,
 )
-from entities import Player, Enemy, XPGem, Bullet, WhipSlash, AoeBlast
+from entities import Player, Enemy, XPGem, Bullet, WhipSlash, AoeBlast, Boss
 from weapons import WeaponInstance, OrbMarker
 from upgrades import get_upgrade_choices
 
@@ -138,6 +139,21 @@ def spawn_enemies(player, enemies, cols, rows, ui_rows, difficulty):
         e = Enemy(x, y, etype)
         e.scale(ENEMY_HP_SCALE ** difficulty, ENEMY_SPEED_SCALE ** difficulty)
         enemies.append(e)
+
+
+def spawn_boss(btype, cols, rows, ui_rows):
+    defn = BOSS_DEFS[btype]
+    size = defn['size']
+    side = random.randint(0, 3)
+    if side == 0:
+        x, y = random.randint(0, max(0, cols - size)), ui_rows - size
+    elif side == 1:
+        x, y = random.randint(0, max(0, cols - size)), rows
+    elif side == 2:
+        x, y = -size, random.randint(ui_rows, max(ui_rows, rows - size))
+    else:
+        x, y = cols, random.randint(ui_rows, max(ui_rows, rows - size))
+    return Boss(x, y, btype, defn)
 
 
 # ── Collision ─────────────────────────────────────────────────────────────────
@@ -259,7 +275,7 @@ def _bullet_char(b):
     return '/' if b.dx * b.dy < 0 else '\\'
 
 
-def draw_game(stdscr, player, enemies, bullets, slashes, blasts, orbs, gems, cols, rows):
+def draw_game(stdscr, player, enemies, bullets, slashes, blasts, orbs, gems, bosses, enemy_bullets, cols, rows):
     for e in enemies:
         ex, ey = int(e.x), int(e.y)
         if UI_ROWS <= ey < rows and 0 <= ex < cols:
@@ -293,6 +309,18 @@ def draw_game(stdscr, player, enemies, bullets, slashes, blasts, orbs, gems, col
     for orb in orbs:
         if UI_ROWS <= orb.y < rows and 0 <= orb.x < cols:
             safe_addch(stdscr, orb.y, orb.x, orb.char, cp('cyan', 'weapon') | curses.A_BOLD)
+
+    for boss in bosses:
+        attr = cp(boss.color, 'enemy') | curses.A_BOLD
+        for bx, by in boss.cells():
+            if UI_ROWS <= by < rows and 0 <= bx < cols:
+                safe_addch(stdscr, by, bx, boss.char, attr)
+
+    for eb in enemy_bullets:
+        if eb.active:
+            ebx, eby = eb.grid_pos()
+            if UI_ROWS <= eby < rows and 0 <= ebx < cols:
+                safe_addch(stdscr, eby, ebx, eb.char, cp(eb.color, 'enemy') | curses.A_BOLD)
 
     py, px = int(round(player.y)), int(round(player.x))
     if player.invuln == 0 or player.invuln % 3 != 0:
@@ -360,47 +388,68 @@ def draw_gameover(stdscr, player, frame, cols, rows):
     bl(6,  '║' + f'  Max HP:   {player.max_hp}'.ljust(bw - 2) + '║', cp('white'))
     bl(7,  '║' + f'  Armor:    {player.armor}'.ljust(bw - 2) + '║', cp('white'))
     bl(8,  '╠' + '═' * (bw - 2) + '╣', cp('red') | curses.A_BOLD)
-    bl(9,  '║' + '  R  ·  Restart   M  ·  Menu   Q  ·  Quit'.ljust(bw - 2) + '║', cp('yellow'))
+    bl(9,  '║' + ' R  ·  Restart   M  ·  Menu   Q  ·  Quit'.ljust(bw - 2) + '║', cp('yellow'))
     bl(10, '╚' + '═' * (bw - 2) + '╝', cp('red') | curses.A_BOLD)
 
 
 def show_start_screen(stdscr, best_time):
-    # Block until a keypress — the start screen is static, no animation needed.
-    # Using timeout(-1) avoids any accidental leak of a non-zero timeout into game_loop.
     stdscr.timeout(-1)
+
+    _TITLE = (
+        " @@@@@@    @@@@@@    @@@@@@@  @@@  @@@      @@@@@@   @@@  @@@  @@@@@@@   @@@  @@@  @@@   @@@@@@   @@@@@@@    @@@@@@",
+        "@@@@@@@@  @@@@@@@   @@@@@@@@  @@@  @@@     @@@@@@@   @@@  @@@  @@@@@@@@  @@@  @@@  @@@  @@@@@@@@  @@@@@@@@  @@@@@@@",
+        "@@!  @@@  !@@       !@@       @@!  @@!     !@@       @@!  @@@  @@!  @@@  @@!  @@@  @@!  @@!  @@@  @@!  @@@  !@@",
+        "!@!  @!@  !@!       !@!       !@!  !@!     !@!       !@!  @!@  !@!  @!@  !@!  @!@  !@!  !@!  @!@  !@!  @!@  !@!",
+        "@!@!@!@!  !!@@!!    !@!       !!@  !!@     !!@@!!    @!@  !@!  @!@!!@!   @!@  !@!  !!@  @!@  !@!  @!@!!@!   !!@@!!",
+        "!!!@!!!!   !!@!!!   !!!       !!!  !!!      !!@!!!   !@!  !!!  !!@!@!    !@!  !!!  !!!  !@!  !!!  !!@!@!     !!@!!!",
+        "!!:  !!!       !:!  :!!       !!:  !!:          !:!  !!:  !!!  !!: :!!   :!:  !!:  !!:  !!:  !!!  !!: :!!        !:!",
+        ":!:  !:!      !:!   :!:       :!:  :!:         !:!   :!:  !:!  :!:  !:!   ::!!:!   :!:  :!:  !:!  :!:  !:!      !:!",
+        "::   :::  :::: ::    ::: :::   ::   ::     :::: ::   ::::: ::  ::   :::    ::::     ::  ::::: ::  ::   :::  :::: ::",
+        " :   : :  :: : :     :: :: :  :    :       :: : :     : :  :    :   : :     :      :     : :  :    :   : :  :: : :",
+    )
+
+    _CTRL = (
+        '┌─ Controls ──────────┐',
+        '│  WASD/Arrows  Move  │',
+        '│  ENTER      Confirm │',
+        '│  P          Pause   │',
+        '│  R          Restart │',
+        '│  Q          Quit    │',
+        '└──────────────────────┘',
+    )
+    _CW = len(_CTRL[0])
 
     def _draw():
         rows, cols = stdscr.getmaxyx()
         stdscr.erase()
-        bw = 54
-        bx = max(0, (cols - bw) // 2)
-        by = max(0, (rows - 11) // 2)
-
-        def bl(y, s, attr=0):
-            safe_addstr(stdscr, by + y, bx, s, attr)
 
         sc_on = _color_state['simple']
         cb_on = _color_state['colorblind']
         bt_str = f'{best_time // 60:02d}:{best_time % 60:02d}' if best_time > 0 else '--:--'
 
-        bl(0,  '╔' + '═' * (bw - 2) + '╗', cp('cyan') | curses.A_BOLD)
-        bl(1,  '║' + ' ASCII SURVIVORS '.center(bw - 2) + '║', cp('cyan') | curses.A_BOLD)
-        bl(2,  '╠' + '═' * (bw - 2) + '╣', cp('cyan') | curses.A_BOLD)
-        bl(3,  '║' + f'  Best Run:  {bt_str}'.ljust(bw - 2) + '║', cp('yellow'))
-        bl(4,  '╠' + '═' * (bw - 2) + '╣', cp('cyan') | curses.A_BOLD)
-        bl(5,  '║' + (' ' * (bw - 2)) + '║', cp('white'))
-        bl(6,  '║' + (' ' * (bw - 2)) + '║', cp('white'))
-        bl(7,  '║' + (' ' * (bw - 2)) + '║', cp('white'))
-        bl(8,  '╠' + '═' * (bw - 2) + '╣', cp('cyan') | curses.A_BOLD)
-        bl(9,  '║' + '  ENTER to play  ·  Q to quit'.center(bw - 2) + '║', cp('white'))
-        bl(10, '╚' + '═' * (bw - 2) + '╝', cp('cyan') | curses.A_BOLD)
+        ts = max(1, (rows - 16) // 2)
+        art_w = max(len(l) for l in _TITLE)
+        for i, line in enumerate(_TITLE):
+            x = max(0, (cols - art_w) // 2)
+            safe_addstr(stdscr, ts + i, x, line, cp('cyan') | curses.A_BOLD)
 
-        sc_label = f'  [S] Simple Colors:    {"ON " if sc_on else "OFF"}'
-        cb_label = f'  [C] Colorblind Mode:  {"ON  (red→blue, green→yellow)" if cb_on else "OFF"}'
-        safe_addstr(stdscr, by + 5, bx + 1, sc_label[:bw - 2],
+        iy = ts + 11
+        safe_addstr(stdscr, iy,     2, f'  Best Run:  {bt_str}', cp('yellow'))
+        safe_addstr(stdscr, iy + 1, 2,
+                    f'  [S] Simple Colors:   {"ON " if sc_on else "OFF"}',
                     (cp('cyan') | curses.A_BOLD) if sc_on else cp('white'))
-        safe_addstr(stdscr, by + 6, bx + 1, cb_label[:bw - 2],
+        safe_addstr(stdscr, iy + 2, 2,
+                    f'  [C] Colorblind Mode: {"ON  (red→blue, green→yellow)" if cb_on else "OFF"}',
                     (cp('cyan') | curses.A_BOLD) if cb_on else cp('white'))
+        safe_addstr(stdscr, iy + 4, 2,
+                    '  ENTER / SPACE  ·  Play          Q  ·  Quit',
+                    cp('white'))
+
+        cx = max(0, cols - _CW - 1)
+        cy = max(0, rows - len(_CTRL) - 1)
+        for i, line in enumerate(_CTRL):
+            safe_addstr(stdscr, cy + i, cx, line, cp('white'))
+
         stdscr.refresh()
 
     result = 'play'
@@ -419,7 +468,7 @@ def show_start_screen(stdscr, best_time):
             _color_state['colorblind'] = not _color_state['colorblind']
             _draw()
 
-    stdscr.timeout(0)  # explicit — nodelay(True) alone isn't reliable on windows-curses
+    stdscr.timeout(0)
     return result
 
 
@@ -440,6 +489,9 @@ def game_loop(stdscr):
     weapon_instances = [WeaponInstance('knife')]
 
     enemies, bullets, slashes, blasts, orbs, gems = [], [], [], [], [], []
+    bosses, enemy_bullets = [], []
+    miniboss_spawned = False
+    boss_spawned = False
 
     frame = 0
     spawn_timer = 0
@@ -523,6 +575,14 @@ def game_loop(stdscr):
 
                 for e in enemies:
                     e.move_toward(player.x, player.y)
+                for boss in bosses:
+                    boss.move_toward(player.x, player.y)
+                    enemy_bullets.extend(boss.attack_tick(player.x, player.y))
+
+                for eb in enemy_bullets:
+                    if eb.active:
+                        eb.tick(cols, rows, UI_ROWS)
+                enemy_bullets = [eb for eb in enemy_bullets if eb.active]
 
                 killed, collected = resolve_collisions(
                     player, enemies, bullets, slashes, blasts, orbs, gems, weapon_instances
@@ -543,6 +603,65 @@ def game_loop(stdscr):
                         player.gain_xp(g.value)
                     gems.clear()
                 enemies = [e for e in enemies if e.alive]
+
+                # Boss collision with player weapons
+                px_i, py_i = int(round(player.x)), int(round(player.y))
+                for b in bullets:
+                    if not b.active:
+                        continue
+                    gx, gy = b.grid_pos()
+                    for boss in bosses:
+                        if boss.alive and (gx, gy) in set(boss.cells()):
+                            boss.take_damage(b.damage)
+                            b.active = False
+                            break
+                for sl in slashes:
+                    if not sl.active:
+                        continue
+                    slash_cells = set(sl.cells())
+                    for boss in bosses:
+                        if boss.alive and boss.id not in sl.hit_ids:
+                            if any(c in slash_cells for c in boss.cells()):
+                                sl.hit_ids.add(boss.id)
+                                boss.take_damage(sl.damage)
+                for bl in blasts:
+                    if not bl.active:
+                        continue
+                    blast_cells = set(bl.cells())
+                    for boss in bosses:
+                        if boss.alive and boss.id not in bl.hit_ids:
+                            if any(c in blast_cells for c in boss.cells()):
+                                bl.hit_ids.add(boss.id)
+                                boss.take_damage(bl.damage)
+                for orb in orbs:
+                    for boss in bosses:
+                        if boss.alive and (orb.x, orb.y) in set(boss.cells()):
+                            boss.take_damage(orb.damage)
+                # Boss contact and enemy-bullet damage to player
+                for boss in bosses:
+                    if boss.alive and (px_i, py_i) in set(boss.cells()):
+                        player.take_damage(boss.damage)
+                for eb in enemy_bullets:
+                    if eb.active:
+                        ebx, eby = eb.grid_pos()
+                        if ebx == px_i and eby == py_i:
+                            player.take_damage(eb.damage)
+                            eb.active = False
+                # Boss kills and drops
+                for boss in bosses:
+                    if not boss.alive:
+                        cx, cy = int(boss.center[0]), int(boss.center[1])
+                        gems.append(XPGem(cx, cy, boss.xp_value, 'big'))
+                        player.kills += 1
+                bosses = [b for b in bosses if b.alive]
+
+                # Boss spawning
+                if not miniboss_spawned and frame == MINIBOSS_SPAWN_FRAME:
+                    bosses.append(spawn_boss('miniboss', cols, rows, UI_ROWS))
+                    miniboss_spawned = True
+                if not boss_spawned and frame == BOSS_SPAWN_FRAME:
+                    bosses.append(spawn_boss('boss', cols, rows, UI_ROWS))
+                    boss_spawned = True
 
                 spawn_timer += 1
                 if spawn_timer >= ENEMY_SPAWN_INTERVAL:
@@ -595,7 +714,7 @@ def game_loop(stdscr):
         # ── Render ───────────────────────────────────────────────────────────
         stdscr.erase()
         draw_hud(stdscr, player, frame, cols)
-        draw_game(stdscr, player, enemies, bullets, slashes, blasts, orbs, gems, cols, rows)
+        draw_game(stdscr, player, enemies, bullets, slashes, blasts, orbs, gems, bosses, enemy_bullets, cols, rows)
 
         if state == 'levelup':
             draw_levelup(stdscr, upgrade_choices, upgrade_selected, cols, rows)
